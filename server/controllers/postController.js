@@ -54,7 +54,7 @@ export const createPost = async (req, res) => {
 export const getFeed = async (req, res) => {
     try {
       const page = Math.max(1,parseInt(req.query.page,10) || 1);
-      const limit = Math.min(50, Math.max(1,parseInt(req.query.limit, 10) || 10));
+      const limit = Math.min(2, Math.max(2,parseInt(req.query.limit, 2) || 2));
       const sort = req.query.sort === "trending" ? "trending" : "recent";
       const allowedTypes = ["discussion","code","career","showcase"];
       const postType = allowedTypes.includes(req.query.postType) ? req.query.postType : null;
@@ -121,7 +121,7 @@ export const getFeed = async (req, res) => {
           {$sort: sortStage},
           {$skip: (page-1)*limit},
           {$limit: limit},
-          {$project: {engagementScore: 0}},
+          {$project: {engagementScore: 0}},//remove engagement score from api response //it ned temp
         ]),
         Post.countDocuments(query),
       ])
