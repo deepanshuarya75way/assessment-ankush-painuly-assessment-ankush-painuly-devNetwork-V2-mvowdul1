@@ -3,7 +3,7 @@ import Connection from "../models/connection.js";
 // @POST 
 export const createPost = async (req, res) => {
     try {
-      const { content, tags, codeSnippet, visibility } = req.body;
+      const { content, tags, codeSnippet, visibility,postType } = req.body;
   
       // ─── VALIDATE ─────────────────────────────────────────
       if (!content && !req.file) {
@@ -12,16 +12,24 @@ export const createPost = async (req, res) => {
           message: "Post content is required",
         });
       }
+
+      const allowedTypes = ["discussion","code","carrer","showcase"];
+      if(postType && !allowedTypes.include(postType)){
+        return res.status(400).json({success: false, message: "Invalid post type"});
+      }
   
       // ─── BUILD POST OBJECT ────────────────────────────────
       const postData = {
         author:     req.user._id,
         content,
         visibility: visibility || "public",
+        postType: postType || (codeSnippet ? "code": "discussion"),
       };
   
       // ─── OPTIONAL FIELDS ──────────────────────────────────
-      if (tags)        postData.tags        = JSON.parse(tags);
+      if (tags)        postData.tags        = [...new Set(JSON.parse(tags).map((tag)=>
+         tag.trim().replece(/^#/,"").toLowerCase()).filter(Boolean))];
+
       if (codeSnippet) postData.codeSnippet = JSON.parse(codeSnippet);
       if (req.file)    postData.image       = req.file.path; // cloudinary url
   
@@ -46,7 +54,17 @@ export const createPost = async (req, res) => {
   // @GET 
 export const getFeed = async (req, res) => {
     try {
-      const { page = 1, limit = 10 } = req.query;
+      const page = Math.max(1,parseInt(req.query.page,10) || 1);
+      const limit = Math.min(50, Math.max(1,parseInt(req.query.limit, 10) || 10));
+      const sort = req.query.sort === "trending" ? "trending" : "recent";
+      const allowedTypes = ["discussion","code","career","showcase"];
+      const postType = allowedTypes.includes(req.query.postType) ? req.query.postType : null;
+
+      const tags = (Array.isArray(req.query.tags) ? req.query.tags.join(",") :
+       req.query.tags || "")
+       .split(",")
+       .map((tag)=> tag.trim().replace(/^#/, "").toLowerCase())
+       .filter(Boolean);
   
       // ─── GET MY CONNECTIONS ───────────────────────────────
       const connections = await Connection.find({
@@ -63,45 +81,101 @@ export const getFeed = async (req, res) => {
           ? c.receiver
           : c.sender
       );
-  
-      // ─── INCLUDE MYSELF IN FEED ───────────────────────────
-      const feedUserIds = [...connectedUserIds, req.user._id];
-  
-      // ─── FETCH POSTS ──────────────────────────────────────
-      const posts = await Post.find({
-        author:     { $in: feedUserIds },
-      })
-        .populate("author",   "name avatar headline subscription")
-        .populate("comments.user", "name avatar headline subscription")
-        .populate({
-          path: "repostOf",
-          populate: {
-            path: "author",
-            select: "name avatar headline subscription",
+
+      //include post from curr user and accepted
+      const query = {author: {$in: [...connectedUserIds,req.user._id]}};
+      if(tags.length) query.tags = {$all: tags};// req post to have every selected tag
+
+      if(postType === "discussion"){ // it will also include older post which dont have postType field
+        query.$and = [{$or: [{postType: "discussion"}, { postType: {$exists: false}
+        }]}];
+      }
+      else if(postType){
+        query.postType = postType;
+      }
+
+      //chose the server side sort order
+      const sortStage = sort === "trending"
+      ? {engagementScore: -1, createdAt: -1}
+      : {createdAt: -1};
+
+      // run 2 db query parallet Post.agg, and post.countdoc
+      const [posts,total] = await Promise.all([
+        Post.aggregate([
+          {$match : query},
+          {
+            $addFields : {
+              //this computes the engagement score for each post , each react type contributes its no. of reaction
+              //  , ifNuLL substitute an empty array when a field is missing
+              engagementScore: {
+                $add: [
+                  {$size: {$ifNull: ["$reaction.fire",[]]}},
+                  {$size: {$ifNull: ["$reaction.insightful",[]]}},
+                  {$size: {$ifNull: ["$reaction.nicework",[]]}},
+                  {$size: {$ifNull: ["$reaction.interesting",[]]}},
+                  {$multiply: [{$size: {$ifNull: ["$comments", []] }}, 2]},
+                  {$multiply: [{$size: {$ifNull: ["$reposts", []] }}, 3]}
+                ],
+              },
+            },
           },
-        })
-        .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(parseInt(limit));
+          {$sort: sortStage},
+          {$skip: (page-1)*limit},
+          {$limit: limit},
+          {$project: {engagementScore: 0}},
+        ]),
+        Post.countDocuments(query),
+      ])
+
+
+      await Post.populate(posts,[
+        {path: "author", select: "name avatar headline subscription"},
+        {path: "comments.user", select: "name avatar headline subscription"},
+        {
+          path:"repostOf",
+          populate:{path: "author", select: "name avatar headline subscription"},
+        },
+      ]);
   
-      // ─── TOTAL COUNT FOR PAGINATION ───────────────────────
-      const total = await Post.countDocuments({
-        author:     { $in: feedUserIds },
-      });
+     
   
       res.status(200).json({
         success: true,
         posts,
         total,
-        page:    parseInt(page),
+        page,
         pages:   Math.ceil(total / limit),
         hasMore: page * limit < total, // frontend uses this to load more
+        filters: {tags, postType,sort},
       });
   
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
     }
   };
+
+
+export const getTrendingTags = async (req,res)=> {
+  try{
+    const days = Math.min(90, Math.max(1, parseInt(req.query.days,10) || 30));
+    const limit = Math.min(30,Math.max(1,parseInt(req.query.limit,10) || 12));
+    const since = new Date(Date.now() - days*24*60*60*1000);
+    
+    const tags = await Post.aggregate([
+      {$match: {createdAt: {$gte: since}, tags: {$exists: true, $ne:[] }}},
+      {$unwind: "$tags"},
+      {$group: {_id: {$toLower: "$tags"},count: {$sum:1 }}},
+      {$sort: {count: -1,_id: 1}},
+      {$limit: limit},
+      {$project: {_id: 0,tags:"$_id",count:1}},
+    ]);
+    res.status(200).json({success: true, tags,days});
+  }
+  catch(err){
+   
+    res.status(500).json({success:false, message: err.message});
+  }
+}
 
   // @PATCH 
 export const reactToPost = async (req, res) => {

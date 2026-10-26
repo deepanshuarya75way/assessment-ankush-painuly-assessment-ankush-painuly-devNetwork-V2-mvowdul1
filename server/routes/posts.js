@@ -13,12 +13,14 @@ import {
   deletePost,
   savePost,
   repost,
+  getTrendingTags
 } from "../controllers/postController.js";
 
 const postRouter = express.Router();
 
 // ─── SPECIFIC ROUTES FIRST ────────────────────────────────
 postRouter.get("/feed",         protect, getFeed);
+postRouter.get("/trending-tags", protect, getTrendingTags);
 postRouter.get("/saved",        protect, getSavedPosts);
 postRouter.get("/user/:userId", protect, getUserPosts);
 

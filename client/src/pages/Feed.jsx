@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import {useSearchParams} from "react-router-dom";
 import { useSelector } from "react-redux";
 import toast from "react-hot-toast";
 import api from "../api/axios";
@@ -7,7 +8,10 @@ import PostCard from "../components/PostCard";
 
 export default function Feed() {
   const { user } = useSelector((store) => store.user);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [posts, setPosts] = useState([]);
+  const [tagInput, setTagInput] = useState(searchParams.get("tags") || "");
+  const [trendingTags, setTrendingTags] = useState([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -16,7 +20,11 @@ export default function Feed() {
   const loadFeed = async (nextPage = 1, append = false) => {
     try {
       setLoading(!append);
-      const res = await api.get(`/posts/feed?page=${nextPage}&limit=10`);
+      const params = new URLSearchParams(searchParams);
+      params.set("page", String(nextPage));
+      params.set("limit","10");
+
+      const res = await api.get("/posts/feed?" + params.toString());
       setPosts((current) => (append ? [...current, ...res.data.posts] : res.data.posts));
       setPage(res.data.page);
       setHasMore(res.data.hasMore);
@@ -28,8 +36,30 @@ export default function Feed() {
   };
 
   useEffect(() => {
-    loadFeed();
-  }, []);
+    setTagInput(searchParams.get("tags") || "");
+    loadFeed(1,false);
+  }, [searchParams]);
+
+  useEffect(()=>{
+    api.get("/posts/trending-tags")
+    .then((res) => setTrendingTags(res.data.tags || []))
+    .catch(()=> setTrendingTags([]));
+  })
+
+  const updateFilter = (key,value) =>{
+    const next = new URLSearchParams(searchParams);
+    if(value) next.set(key,value);
+    else next.delete(key);
+    next.delete("page");
+    setSearchParams(next);
+  };
+
+  const applyTagFilter = (event) => {
+    event.preventDefault();
+    const tags = [...new Set(tagInput.split(",").map((tag)=> tag.trim().replace(/^#/,"").toLowerCase())
+    .filter(Boolean))];
+    updateFilter("tags", tags.join(","));
+  }
 
   const handleCreatePost = async (form) => {
     if (!form.content.trim() && !form.image && !form.code.trim()) {
@@ -42,6 +72,7 @@ export default function Feed() {
       const formData = new FormData();
       formData.append("content", form.content);
       formData.append("visibility", form.visibility);
+      formData.append("postType",form.postType);
 
       const tags = form.tags
         .split(",")
@@ -66,8 +97,8 @@ export default function Feed() {
         formData.append("image", form.image);
       }
 
-      const res = await api.post("/posts", formData);
-      setPosts((current) => [res.data.post, ...current]);
+      await api.post("/posts",formData);
+      await loadFeed(1,false);
       toast.success("Post created");
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to create post");
@@ -156,7 +187,7 @@ export default function Feed() {
   const handleRepost = async (postId) => {
     try {
       const res = await api.post(`/posts/${postId}/repost`, { note: "" });
-      setPosts((current) => [res.data.post, ...current]);
+      setPosts((current) => current.filter((post) => post._id !== postId));
       toast.success("Post reposted");
     } catch (error) {
       toast.error(error.response?.data?.message || "Repost failed");
@@ -176,6 +207,34 @@ export default function Feed() {
       </section>
 
       <PostComposer onCreate={handleCreatePost} loading={creating} />
+
+      <section className="space-y-4 rounded-3xl border border-dark-500 bg-dark-700 p-5" aria-label="Feed filters">
+        <div className="grid gap-3 md:grid-cols-3">
+          <form onSubmit={applyTagFilter} className="flex gap-2 md:col-span-1">
+            <input value= {tagInput} onChange={(event) => setTagInput(envent.target.value)}
+            placeholder="Filter tags: react, docker" aria-label="Filter by tags" className="min-w-0 flex-1 rounded-xl border border-dark-400 bg-dark-800
+            px-3 py-2 text-sm text-slate-100 outline-none focus:border-brand-500" />
+            <button className="rounded-xl bg-brand-500 px-4 py-2 text-sm font-medium text-white" type="submit"> Apply </button>
+            </form>
+            <select value={searchParams.get("postType") || "" } onChange={(event)=>
+              updateFilter("postType",event.target.value)} aria-label="Filter by post type"
+              className="rounded-xl border border-dark-400 bg-dark-800 px-3 py-2 text-sm text-slate-200 outline-none focus:border-brand-500">
+                <option value="">All post types</option><option
+                value="discussion">Discussion</option><option value="showcase">Showcase</option>
+                </select> 
+                <select value={searchParams.get("sort") || "recent"} onChange={(event)=>
+                  updateFilter("sort",event.target.value==="recent" ? "" : event.target.value)} aria-label="Sort feed" 
+                  className="rounded-xl border border-dark-400 bg-dark-800 px-3 py-2 text-sm text-slate-200 outline-none focus:border-brand-500">
+                    <option value="recent">Recent</option><option value="trending">Trending</option>
+                    </select>
+                    </div>
+                    {!!trendingTags.length && <div className="flex flex-wrap items-center gap-2"><span 
+                    className="text-xs font-semibold uppercase tracking-wider text-slate-400"> Trending tags </span>
+                    {trendingTags.map(({tag,count}) => <button key={tag} type="button" onClick={()=>{
+                      setTagInput(tag); updateFilter("tags",tag); }} className="rounded-full bg-brand-500/10 px-3 py-1 text-xs font-medium text-brand-300 hover:bg-brand-500/20"
+                      aria-label={"Filter by #" + tag + ", "+ count + " recent posts" }> #{tag} <span className="text-brand-200/70">{count}</span>
+                      </button>)}</div>}
+                      </section>
 
       {loading ? (
         <div className="rounded-3xl border border-dark-500 bg-dark-700 p-8 text-center text-slate-400">

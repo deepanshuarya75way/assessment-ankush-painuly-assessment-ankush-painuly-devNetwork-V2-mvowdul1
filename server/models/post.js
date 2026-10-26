@@ -49,6 +49,13 @@ const postSchema = new mongoose.Schema(
     // ─── TAGS ─────────────────────────────────────────────
     tags: [{ type: String }], // ["react", "nodejs", "javascript"]
 
+
+    postTypes: {
+      type: String,
+      enum: ["discussion","code","career","showcase"],
+      default: "discussion",
+    },
+
     // ─── REACTIONS ────────────────────────────────────────
     // array of userIds who reacted
     reactions: {
@@ -85,5 +92,6 @@ const postSchema = new mongoose.Schema(
 // ─── INDEXES FOR BETTER PERFORMANCE ───────────────────────
 postSchema.index({ author: 1, createdAt: -1 });
 postSchema.index({ tags: 1 });
+postSchema.index({tags: 1,createdAt: -1});
 
 export default mongoose.model("Post", postSchema);
