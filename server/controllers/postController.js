@@ -4,7 +4,6 @@ import Connection from "../models/connection.js";
 export const createPost = async (req, res) => {
     try {
       const { content, tags, codeSnippet, visibility,postType } = req.body;
-  
       // ─── VALIDATE ─────────────────────────────────────────
       if (!content && !req.file) {
         return res.status(400).json({
