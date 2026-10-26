@@ -44,7 +44,7 @@ export default function Feed() {
     api.get("/posts/trending-tags")
     .then((res) => setTrendingTags(res.data.tags || []))
     .catch(()=> setTrendingTags([]));
-  })
+  },[]);
 
   const updateFilter = (key,value) =>{
     const next = new URLSearchParams(searchParams);
@@ -211,7 +211,7 @@ export default function Feed() {
       <section className="space-y-4 rounded-3xl border border-dark-500 bg-dark-700 p-5" aria-label="Feed filters">
         <div className="grid gap-3 md:grid-cols-3">
           <form onSubmit={applyTagFilter} className="flex gap-2 md:col-span-1">
-            <input value= {tagInput} onChange={(event) => setTagInput(envent.target.value)}
+            <input value= {tagInput} onChange={(event) => setTagInput(event.target.value)}
             placeholder="Filter tags: react, docker" aria-label="Filter by tags" className="min-w-0 flex-1 rounded-xl border border-dark-400 bg-dark-800
             px-3 py-2 text-sm text-slate-100 outline-none focus:border-brand-500" />
             <button className="rounded-xl bg-brand-500 px-4 py-2 text-sm font-medium text-white" type="submit"> Apply </button>

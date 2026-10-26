@@ -157,15 +157,15 @@ export const getFeed = async (req, res) => {
 
 export const getTrendingTags = async (req,res)=> {
   try{
-    const days = Math.min(90, Math.max(1, parseInt(req.query.days,10) || 30));
-    const limit = Math.min(30,Math.max(1,parseInt(req.query.limit,10) || 12));
+    const days = Math.min(90, Math.max(1, parseInt(req.query.days,10) || 30)); // range last 1 - 90 , deafult 30
+    const limit = Math.min(30,Math.max(1,parseInt(req.query.limit,10) || 12)); // controls how many tags the endpoint returns, default 12
     const since = new Date(Date.now() - days*24*60*60*1000);
     
     const tags = await Post.aggregate([
-      {$match: {createdAt: {$gte: since}, tags: {$exists: true, $ne:[] }}},
-      {$unwind: "$tags"},
-      {$group: {_id: {$toLower: "$tags"},count: {$sum:1 }}},
-      {$sort: {count: -1,_id: 1}},
+      {$match: {createdAt: {$gte: since}, tags: {$exists: true, $ne:[] }}}, //keeps only recent posts that have a non-empty tags
+      {$unwind: "$tags"}, // turns each post tag array into separate entries,
+      {$group: {_id: {$toLower: "$tags"},count: {$sum:1 }}},// combines entris with the same lowercase tag
+      {$sort: {count: -1,_id: 1}},// ranks by freq , highest first
       {$limit: limit},
       {$project: {_id: 0,tags:"$_id",count:1}},
     ]);
