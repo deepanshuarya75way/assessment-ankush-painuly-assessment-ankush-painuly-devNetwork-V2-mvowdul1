@@ -1,0 +1,14 @@
+kind: Service
+apiVersion: v1
+
+metadata:
+  name: client-svc
+  namespace: devnetwork-ns
+
+spec:
+  selector:
+    app: client-pod
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80

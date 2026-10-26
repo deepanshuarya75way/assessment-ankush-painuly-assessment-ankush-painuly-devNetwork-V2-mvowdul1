@@ -1,0 +1,31 @@
+kind: Deployment
+apiVersion: apps/v1
+
+metadata:
+  name: client-deployment
+  namespace: devnetwork-ns
+  labels:
+    app: client
+
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: client-pod
+  template:
+    metadata:
+      labels:
+        app: client-pod
+    spec:
+      containers:
+        - name: client-container
+          image: ankushpainuly1729/devnetwork-client
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: "50m"       # 0.05 CPU core
+              memory: "64Mi"
+            limits:
+              cpu: "200m"      # 0.2 CPU core
+              memory: "128Mi"

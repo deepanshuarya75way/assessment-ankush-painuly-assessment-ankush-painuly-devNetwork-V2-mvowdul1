@@ -1,0 +1,33 @@
+services:
+  server:
+    build: 
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: server-prod
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./server/.env
+    networks:
+      - devNetwork
+    
+  client:
+    build: 
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=/api
+    container_name: client-prod
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    networks:
+      - devNetwork
+
+    depends_on:
+      - server
+
+networks:
+  devNetwork:
+    driver: bridge

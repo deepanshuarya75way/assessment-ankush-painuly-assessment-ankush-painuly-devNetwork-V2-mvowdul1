@@ -1,0 +1,53 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: devnetwork-ingress
+  namespace: devnetwork-ns
+  annotations:
+    # NGINX Ingress Controller settings
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # Ensure WebSocket upgrades pass through without buffering
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/websocket-services: "server-svc"
+    # Allow larger payloads (for uploads/media)
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+
+    # --- Enable Sticky Sessions (Session Affinity) ---
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "SERVERID"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-path: "/"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: devnetwork.dpdns.org
+      http:
+        paths:
+          # 1. Route Socket.IO directly to Server
+          - path: /socket.io
+            pathType: Prefix
+            backend:
+              service:
+                name: server-svc
+                port:
+                  number: 8080
+
+          # 2. Route REST API directly to Server
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: server-svc
+                port:
+                  number: 8080
+
+          # 3. Route all Frontend traffic to Client (Nginx/Vite)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: client-svc
+                port:
+                  number: 80

@@ -1,0 +1,28 @@
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile.dev
+    container_name: server-dev
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./server/.env
+    networks:
+      - devNetwork
+
+  client:
+    build: 
+      context: ./client
+      dockerfile: Dockerfile.dev
+    container_name: client-dev
+    ports:
+      - "5173:5173"
+    networks:
+      - devNetwork
+    depends_on:
+      - server
+
+networks:
+  devNetwork:
+    driver: bridge
